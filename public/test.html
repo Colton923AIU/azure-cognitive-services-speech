@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+  <head> </head>
+  <body>
+    <canvas id="audioWaveformCanvas" width="500" height="100"></canvas>
+  </body>
+  <script>
+    // Assume audioBlob is your audio data as a Blob
+
+    // Create an audio element
+    const audio = new Audio();
+    audio.src = URL.createObjectURL(audioBlob);
+
+    // When the audio is loaded, create an image representation
+    audio.addEventListener('loadeddata', () => {
+      // Create a canvas element
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      // Set canvas dimensions based on audio duration and desired image size
+      const width = 500; // Example width
+      const height = 100; // Example height
+      canvas.width = width;
+      canvas.height = height;
+
+      // Draw the audio waveform onto the canvas
+      drawAudioWaveform(ctx, audio, width, height);
+
+      // Convert canvas to a data URL representing a PNG image
+      const imageDataURL = canvas.toDataURL('image/png');
+
+      // Use the data URL as needed (e.g., display it, save it, etc.)
+      console.log(imageDataURL);
+    });
+
+    // Function to draw audio waveform onto canvas
+    function drawAudioWaveform(ctx, audio, width, height) {
+      const audioData = getAudioData(audio);
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      const step = audioData.length / width;
+      for (let i = 0; i < width; i++) {
+        const sample = audioData[Math.floor(i * step)] / 128.0; // Adjust for canvas height
+        ctx.lineTo(i, height / 2 + (sample * height) / 2);
+      }
+      ctx.stroke();
+    }
+
+    // Function to extract audio data from audio element
+    function getAudioData(audio) {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioCtx.createMediaElementSource(audio);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteTimeDomainData(dataArray);
+      return dataArray;
+    }
+  </script>
+</html>

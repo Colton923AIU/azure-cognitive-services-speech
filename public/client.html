@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>AIU Speech Converter</title>
+    <meta charset="utf-8" />
+  </head>
+
+  <body>
+    <div id="content" style="display: none">
+      <table width="100%">
+        <tr>
+          <td align="right">Resource Key</td>
+          <td>
+            <input
+              id="resourceKey"
+              type="text"
+              placeholder="Your resource key (32 characters)"
+              value="5c28ff6bb0594e698b5299a4a143dfe3"
+              disabled
+            />
+          </td>
+        </tr>
+        <tr>
+          <td align="right">Resource region</td>
+          <td>
+            <input
+              id="resourceRegion"
+              type="text"
+              placeholder="Your resource region"
+              value="eastus"
+              disabled
+            />
+          </td>
+        </tr>
+        <tr>
+          <td align="right">Voice</td>
+          <td>
+            <div id="selectDiv"></div>
+          </td>
+        </tr>
+        <tr>
+          <td align="right" valign="top">Input</td>
+          <td>
+            <textarea
+              id="phraseDiv"
+              style="display: inline-block; width: 500px; height: 50px"
+            >
+Placeholder Text</textarea
+            >
+          </td>
+        </tr>
+        <tr>
+          <button id="clientAudioAzure" onclick="getSpeechFromAzure()">
+            Output
+          </button>
+        </tr>
+      </table>
+      <table width="100%">
+        <tr>
+          <td align="right">Upload .WAV Audio</td>
+          <td>
+            <input type="file" id="fileInput" accept=".wav" />
+          </td>
+        </tr>
+        <tr>
+          <button id="ttsButton" onclick="translateAudio()">
+            Translate Audio
+          </button>
+        </tr>
+        <tr>
+          <div id="translationDiv"></div>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Speech SDK reference sdk. -->
+    <script src="https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@latest/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js"></script>
+    <script>
+      var resourceKey = null;
+      var resourceRegion = 'eastus';
+      var SpeechSDK;
+      var speechConfig;
+
+      document.addEventListener('DOMContentLoaded', function () {
+        resourceKey = document.getElementById('resourceKey').value;
+        resourceRegion = document.getElementById('resourceRegion').value;
+
+        if (!!window.SpeechSDK) {
+          SpeechSDK = window.SpeechSDK;
+          document.getElementById('content').style.display = 'block';
+        }
+      });
+
+      function translateAudio() {
+        var fileInput = document.getElementById('fileInput');
+        var file = fileInput.files[0];
+
+        if (!file) {
+          alert('Please select an audio file.');
+          return;
+        }
+
+        speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
+          resourceKey,
+          resourceRegion
+        );
+        speechConfig.speechRecognitionLanguage = 'en-US';
+
+        var audioConfig = SpeechSDK.AudioConfig.fromWavFileInput(file);
+
+        var speechRecognizer = new SpeechSDK.SpeechRecognizer(
+          speechConfig,
+          audioConfig
+        );
+        async function inner() {
+          return new Promise((resolve, reject) => {
+            let response = '';
+            speechRecognizer.recognizing = (s, e) => {
+              if (
+                e.result.reason === SpeechSDK.ResultReason.RecognizingSpeech
+              ) {
+                console.log(`RECOGNIZING: Text=${e.result.text}`);
+                response += e.result.text;
+              }
+            };
+
+            speechRecognizer.recognized = (s, e) => {
+              if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+                console.log(`RECOGNIZED: Text=${e.result.text}`);
+                response += e.result.text;
+              } else if (e.result.reason === SpeechSDK.ResultReason.NoMatch) {
+                console.log('NOMATCH: Speech could not be recognized.');
+              }
+            };
+
+            speechRecognizer.sessionStopped = (s, e) => {
+              console.log('Session stopped.');
+              speechRecognizer.stopContinuousRecognitionAsync();
+              resolve(response);
+            };
+            speechRecognizer.startContinuousRecognitionAsync();
+          });
+        }
+        var translationDiv = document.getElementById('translationDiv');
+        inner()
+          .then((msg) => {
+            translationDiv.innerText = msg;
+          })
+          .catch((err) => {
+            console.log(err);
+            translationDiv.innerText = err;
+          });
+      }
+    </script>
+    <!-- Speech SDK USAGE -->
+    <script>
+      // status fields and start button in UI
+      var phraseDiv;
+
+      // subscription key and region for speech services.
+      var resourceKey = null;
+      var resourceRegion = 'eastus';
+      var authorizationToken;
+      var SpeechSDK;
+      var synthesizer;
+
+      var phrase = 'Placeholder Text';
+      var queryString = null;
+
+      var audioType = 'audio/mpeg';
+      var serverSrc = '/text-to-speech';
+
+      // Voice chooser
+      var selectElement;
+      var voice = 'en-US-DavisNeural';
+
+      function DisplayError(error) {
+        window.alert(JSON.stringify(error));
+      }
+
+      // Client-side request directly to Azure Cognitive Services
+      function getSpeechFromAzure() {
+        // authorization for Speech service
+        var speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
+          resourceKey,
+          resourceRegion
+        );
+        // Customize Speech config
+        speechConfig.speechSynthesisLanguage = 'en-US';
+        speechConfig.speechSynthesisVoiceName = voice;
+
+        // new Speech object
+        synthesizer = new SpeechSDK.SpeechSynthesizer(speechConfig);
+
+        synthesizer.speakTextAsync(
+          phrase,
+          function (result) {
+            // Success function
+
+            // display status
+            if (
+              result.reason ===
+              SpeechSDK.ResultReason.SynthesizingAudioCompleted
+            ) {
+              const blob = new Blob([result.audioData], { type: 'audio/mpeg' });
+              const url = window.URL.createObjectURL(blob);
+
+              window.open(url);
+            } else if (result.reason === SpeechSDK.ResultReason.Canceled) {
+              // display Error
+              throw result.errorDetails;
+            }
+
+            // clean up
+            synthesizer.close();
+            synthesizer = undefined;
+          },
+          function (err) {
+            // Error function
+            throw err;
+            // clean up
+            synthesizer.close();
+            synthesizer = undefined;
+          }
+        );
+      }
+
+      // Initialize
+      document.addEventListener('DOMContentLoaded', function () {
+        // Choose Voice
+        var selectDiv = document.getElementById('selectDiv');
+        selectElement = document.createElement('select');
+        var options = [
+          'en-US-AvaNeural',
+          'en-US-AndrewNeural',
+          'en-US-EmmaNeural',
+          'en-US-BrianNeural',
+          'en-US-JennyNeural',
+          'en-US-GuyNeural',
+          'en-US-AriaNeural',
+          'en-US-DavisNeural',
+          'en-US-JaneNeural',
+          'en-US-JasonNeural',
+          'en-US-SaraNeural',
+          'en-US-TonyNeural',
+          'en-US-NancyNeural',
+          'en-US-AmberNeural',
+          'en-US-AnaNeural (Female, Child)',
+          'en-US-AshleyNeural',
+          'en-US-BrandonNeural',
+          'en-US-ChristopherNeural',
+          'en-US-CoraNeural',
+          'en-US-ElizabethNeural',
+          'en-US-EricNeural',
+          'en-US-JacobNeural',
+          'en-US-JennyMultilingualNeural3',
+          'en-US-MichelleNeural',
+          'en-US-MonicaNeural',
+          'en-US-RogerNeural',
+          'en-US-RyanMultilingualNeural3',
+          'en-US-SteffanNeural',
+          'en-US-AIGenerate1Neural1',
+          'en-US-AIGenerate2Neural1',
+          'en-US-AndrewMultilingualNeural3',
+          'en-US-AvaMultilingualNeural3',
+          'en-US-BlueNeural1',
+          'en-US-BrianMultilingualNeural3',
+          'en-US-EmmaMultilingualNeural3',
+          'en-US-AlloyMultilingualNeural4',
+          'en-US-EchoMultilingualNeural4',
+          'en-US-FableMultilingualNeural4',
+          'en-US-OnyxMultilingualNeural4',
+          'en-US-NovaMultilingualNeural4',
+          'en-US-ShimmerMultilingualNeural4',
+          'en-US-AlloyMultilingualNeuralHD4',
+          'en-US-EchoMultilingualNeuralHD4',
+          'en-US-FableMultilingualNeuralHD4',
+          'en-US-OnyxMultilingualNeuralHD4',
+          'en-US-NovaMultilingualNeuralHD4',
+          'en-US-ShimmerMultilingualNeuralHD4',
+        ];
+        options.map((option) => {
+          var optionElement = document.createElement('option');
+          optionElement.textContent = option;
+          optionElement.value = option;
+
+          selectElement.add(optionElement);
+        });
+        selectElement.addEventListener('change', function (e) {
+          voice = e.target.value;
+        });
+        selectDiv.appendChild(selectElement);
+        var clientAudioAzureControl =
+          document.getElementById('clientAudioAzure');
+
+        resourceKey = document.getElementById('resourceKey').value;
+        resourceRegion = document.getElementById('resourceRegion').value;
+        var phraseDiv = document.getElementById('phraseDiv');
+        phraseDiv.addEventListener('change', function (e) {
+          phrase = e.target.value;
+        });
+        if (!!window.SpeechSDK) {
+          SpeechSDK = window.SpeechSDK;
+          clientAudioAzure.disabled = false;
+
+          document.getElementById('content').style.display = 'block';
+        }
+      });
+    </script>
+  </body>
+</html>
